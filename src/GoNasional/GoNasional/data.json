@@ -1,0 +1,28 @@
+{
+    "timestamp": 1788862969.2981968,
+    "objects": [
+        {
+            "class": "bola",
+            "confidence": 0.855,
+            "center": {
+                "x": 208,
+                "y": 230
+            },
+            "bbox": {
+                "x1": 157,
+                "y1": 173,
+                "x2": 260,
+                "y2": 287
+            },
+            "offset": {
+                "horizontal": -2.42,
+                "vertical": 9.46
+            },
+            "label": null,
+            "servo_angle": {
+                "distance_robot_cm": 52.807993242913895
+            },
+            "distance_cm": 36.69
+        }
+    ]
+}
