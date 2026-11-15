@@ -5,6 +5,7 @@ from enum import Enum
 
 import rclpy
 from rclpy.node import Node
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from std_msgs.msg import String, Int32, Float64, Float32
 from geometry_msgs.msg import Twist
 from op3_walking_module_msgs.msg import WalkingParam
@@ -21,7 +22,12 @@ from .ema_filter import DataFilter
 KANAN             = 156  # Kick kanan 
 KIRI              = 155   # kick kiri 
 
-ACTION_DURATION   = 1.0  # dusari action 
+ACTION_DURATION   = 1.0  # dusari action
+
+# Action module menolak page baru selama page sebelumnya masih jalan
+# ("Can not play page ... (Now playing)"), jadi page berikutnya menunggu
+# /robotis/movement_done. Timeout hanya pengaman kalau sinyal tidak datang.
+PAGE_DONE_TIMEOUT = 4.0
 
 Y_ROTATED         = 0.03 # param untuk y sebelum rotate 
 YAW_ROTATED       = 5.3  # param untuk yaw sebelum rotate
@@ -105,6 +111,14 @@ class ActionPublisParam:
             Float32, '/vision/jarak_kamera', self.jarak_callback, 10,
             callback_group=self.node.sensor_group)
 
+        # Group sendiri supaya sinyal page selesai tetap diterima saat
+        # kick()/fall() sedang menunggu di thread lain.
+        self._page_done = threading.Event()
+        self._page_done.set()
+        self.node.create_subscription(
+            String, '/robotis/movement_done', self._movement_done_callback, 10,
+            callback_group=MutuallyExclusiveCallbackGroup())
+
         self.node.get_logger().info('button_soccer_node GaitController siap ???')
 
     def enable_head_once(self):
@@ -119,6 +133,20 @@ class ActionPublisParam:
             self.node.destroy_timer(self._head_enable_timer)
             self._head_enable_timer = None
         self.enable_head_once()
+
+    def _movement_done_callback(self, msg):
+        if msg.data in ("action", "action_failed"):
+            self._page_done.set()
+
+    def _play_page(self, page):
+        """Mainkan action page dan tandai belum selesai sampai movement_done datang."""
+        self._page_done.clear()
+        self.init_pose(page)
+
+    def _wait_page_done(self):
+        if not self._page_done.wait(PAGE_DONE_TIMEOUT):
+            self.node.get_logger().warn(
+                f"Page belum selesai setelah {PAGE_DONE_TIMEOUT}s, lanjut")
 
     def start_walking(self):
         self.walking_param("start")
@@ -363,7 +391,7 @@ class ActionPublisParam:
 
             time.sleep(0.2)
 
-            self.init_pose(80)
+            self._play_page(80)
 
             time.sleep(0.5)
 
@@ -393,10 +421,10 @@ class ActionPublisParam:
 
             time.sleep(0.2)
 
-            self.init_pose(80)
+            self._play_page(80)
 
             time.sleep(0.5)
-            
+
             time.sleep(0.5)  # kasih waktu module aktif
             if self.acc_x_filtered < -treshold:
                 self.node.get_logger().warn("Jatuh DEPAN")
@@ -414,7 +442,9 @@ class ActionPublisParam:
         # aktifkan action module
         self.action_param("action_module")
         time.sleep(0.5)
-        self.init_pose(page)
+        # Page 80 dari kick()/fall() harus selesai dulu, kalau tidak page ini ditolak
+        self._wait_page_done()
+        self._play_page(page)
 
         if self._reset_timer:
             self._reset_timer.cancel()
@@ -432,7 +462,8 @@ class ActionPublisParam:
         self.node.get_logger().info("Recovery selesai -> balik NORMAL")
         self.kick_last_time = time.time()
 
-        time.sleep(0.5)
+        # Jangan ganti module sebelum page tendang/bangun selesai
+        self._wait_page_done()
         self.action_param("walking_module")
         if self._head_enable_timer is not None:
             self.node.destroy_timer(self._head_enable_timer)
