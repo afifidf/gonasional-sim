@@ -10,6 +10,7 @@ never moves the robot.
 
 import argparse
 import math
+import os
 import sys
 import time
 
@@ -154,6 +155,13 @@ def main():
     if team is not None:
         mates = ', '.join(f'#{m.player} {m.role or "-"}' for m in team.mates) or 'tidak ada'
         report('PASS' if team.mates else 'WARN', 'tim', f'teman terdengar: {mates}')
+
+    if not any(w.count for w in watches.values()):
+        domain = os.environ.get('ROS_DOMAIN_ID', '0') or '0'
+        print(f'Tidak ada satu pun topic robot di ROS_DOMAIN_ID={domain}. Jalankan dulu '
+              'op3_manager + aroc_soccer.launch.py (di simulasi: bringup.launch.py lalu '
+              'aroc_soccer.launch.py sim:=true). Untuk team.launch.py, tiap robot ada di '
+              'domain sendiri: ROS_DOMAIN_ID=11/12/13 ros2 run GoNasional preflight --sim\n')
 
     width = max(len(item) for _, item, _ in results)
     for level, item, detail in results:
