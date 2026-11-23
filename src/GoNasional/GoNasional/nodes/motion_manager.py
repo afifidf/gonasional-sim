@@ -137,11 +137,23 @@ class MotionManager(Node):
     def _on_command(self, msg):
         command = msg.data.strip().lower()
         if command == 'stand' and self.state == 'IDLE':
+            if not self._joints_alive():
+                # op3_manager not up yet (or the simulator not connected):
+                # commands sent now are lost and can leave its modules stuck.
+                self.get_logger().warn(
+                    'stand ignored: no /robotis/present_joint_states yet (op3_manager running?)',
+                    throttle_duration_sec=5.0)
+                return
             self._start_stand()
         elif command == 'sit' and self.state in ('READY', 'WALKING'):
             self._start_sit()
         elif command == 'stop':
             self._cmd = (0.0, 0.0, 0.0)
+
+    def _joints_alive(self, max_age=1.0):
+        stamp = self.io.joints_stamp
+        return stamp is not None and \
+            (self.get_clock().now() - stamp).nanoseconds * 1e-9 < max_age
 
     def _on_kick(self, msg):
         side = msg.data.strip().lower()

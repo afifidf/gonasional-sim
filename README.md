@@ -42,6 +42,9 @@ ros2 run GoNasional preflight          # cek pra-pertandingan
 ```
 
 Di simulasi: lihat README [op3-krsbi-sim](https://github.com/afifidf/op3-krsbi-sim).
+Tiga robot satu tim di Webots: `ros2 launch aroc_sim_bridge team.launch.py` (tiap robot
+di ROS domain sendiri, hanya bicara lewat UDP). Argumen `player:=`, `start_pose:=x,y,theta`,
+dan `goalie:=` di `aroc_soccer.launch.py` menimpa `soccer.yaml` untuk satu robot.
 `player_number` harus berbeda di tiap robot (`config/soccer.yaml`). Checklist lengkap:
 [docs/checklist_pertandingan.md](src/GoNasional/docs/checklist_pertandingan.md).
 
