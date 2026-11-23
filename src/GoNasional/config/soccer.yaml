@@ -1,0 +1,100 @@
+# Shared parameters of the AROC soccer stack. Loaded first; sim.yaml or
+# robot.yaml is loaded on top and overrides what differs between the two.
+/**:
+  ros__parameters:
+    team_number: 1                # must match the GameController's teams.yaml
+    player_number: 1              # jersey number, 1-based; different on every robot
+    field:
+      length: 9.0
+      width: 6.0
+      goal_width: 2.6             # KRSBI-H / RoboCup KidSize
+      penalty_mark_distance: 1.5
+    camera:
+      width: 450                  # frame size used by main_vision / /obj_detect
+      height: 337
+      hfov_deg: 65.2              # from 78 deg diagonal FOV at 4:3
+      source_width: 0             # raw camera image; 0 = same as width/height
+      source_height: 0
+      fx: 0.0                     # intrinsics at source resolution; 0 = from hfov_deg
+      fy: 0.0
+      cx: 0.0
+      cy: 0.0
+      vfov_deg: 51.0
+      height_m: 0.46
+
+motion_manager:
+  ros__parameters:
+    pages:
+      walk_ready: 80
+      sit: 15
+      kick_left: 155
+      kick_right: 156
+      getup_front: 142
+      getup_back: 143
+    walk:
+      gain_x: 3.0                 # (m/s) per metre of x step amplitude
+      gain_y: 1.5
+      gain_yaw: 1.5               # (rad/s) per radian of yaw step amplitude
+      max_x_amp: 0.010            # legacy follow_head limit
+      max_y_amp: 0.015
+      max_yaw_amp: 0.1745         # 10 deg
+      amp_slew_per_s: 0.03
+      yaw_slew_per_s: 0.6
+      cmd_timeout: 0.5
+      stop_settle: 1.0
+    safety:
+      fall_angle_deg: 55.0
+      recover_angle_deg: 30.0
+      fall_debounce: 0.15
+      forward_acc_sign: -1.0      # acc_x < 0 when lying on the front (legacy convention)
+      imu_timeout: 1.0
+      max_getup_attempts: 3
+    head:
+      pan_limit: 1.2
+      tilt_min: -1.2
+      tilt_max: 0.1
+      scan_rows: [-0.25, -0.70, -1.10]
+      scan_pan_rate: 1.0
+      track_gain: 0.5
+      lost_hold: 1.0
+      center_tilt: -0.3
+
+localization:
+  ros__parameters:
+    start_pose: [-0.5, 0.0, 0.0]  # x, y (m), theta (rad) when `stand` is pressed
+    start_std_xy: 0.3
+    localized_std_xy: 0.45
+    rate_hz: 20.0
+    mcl:
+      particles: 300
+    imu:
+      yaw_sign: 1.0
+    ball:
+      friction: 0.6
+      visible_timeout: 0.5
+      forget_timeout: 6.0
+
+team_comm:
+  ros__parameters:
+    team_comm:
+      address: 255.255.255.255    # broadcast address of the robots' WiFi network
+      port: 0                     # 0 = 10000 + team_number
+      rate_hz: 3.0
+
+behavior:
+  ros__parameters:
+    team:
+      goalie_player: 0            # goalkeeper if no GameController says (0 = none)
+    autostart: false
+    rate_hz: 10.0
+    reset_on_ready: reentry       # robots walk in from a touchline of their own half
+    reset_on_unpenalize: reentry
+    striker:
+      max_vx: 0.03
+      max_vy: 0.02
+      max_wz: 0.25
+      back_vx: 0.015
+      kick_x: 0.19
+      kick_y: 0.055
+      ready_pose_kickoff: [-0.75, 0.0, 0.0]
+      ready_pose_defend: [-2.0, 0.0, 0.0]

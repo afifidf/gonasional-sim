@@ -1,0 +1,21 @@
+# Overrides for the physical OP3. Values that have not been measured on the
+# robot yet stay at the conservative defaults of soccer.yaml.
+/**:
+  ros__parameters:
+    camera:
+      # C920 runs at 1280x720 (op3_bringup usb_cam) and main_vision squashes it
+      # to 450x337. hfov 70.4 deg is derived from the 78 deg diagonal at 16:9,
+      # NOT measured: calibrate at 1280x720 and fill fx, fy, cx, cy.
+      # (camcalibrasi.yaml is a 640x480 calibration, a different camera mode.)
+      source_width: 1280
+      source_height: 720
+      hfov_deg: 70.4
+
+motion_manager:
+  ros__parameters:
+    walk:
+      max_x_amp: 0.010
+
+behavior:
+  ros__parameters:
+    autostart: false

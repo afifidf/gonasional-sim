@@ -29,23 +29,28 @@ TRACK_HOLD = 1.5
 
 # Pose ideal head saat robot melakukan rotate (radian)
 HEAD_ROTATE_PAN = 0.0
-HEAD_ROTATE_TILT = -0.3
+HEAD_ROTATE_TILT = -0.6
 
 #KICKK
-TARGET_2_KICK  = 25
+TARGET_2_KICK  = 27
 KICK_KIRI = 155
 KICK_KANAN= 156
 
-TARGET_JARAK3 = 45  
+TARGET_JARAK3 = 30
 
-YAW_ERORR = 10
+YAW_ERORR = 12
+# YAW_ERORR = 12 #oke
+
 THRESHOLD = 9 
 ACTION_PAGE_FRONT = 142  # jatuh depan 
 ACTION_PAGE_BACK  = 143  # jatuh belakang
-TARGET_DISTANCE   = 60  
+TARGET_DISTANCE   = 65
+# TARGET_DISTANCE   = 65 #oke
 
-BALL_YAW_OFFSETS  = [-15.0, 13.5, 42.0, -37.0] 
-# BALL_YAW_OFFSETS  = [0.0, 13.5, 40.0, -44.0] 
+BALL_YAW_OFFSETS  = [0.0, 0.0, 0.0, 0.0] 
+# BALL_YAW_OFFSETS  = [15.0, 13.5, 40.0, -37.0] 
+# BALL_YAW_OFFSETS  = [0.0, 13.5, 42.0, -39.0] 
+# BALL_YAW_OFFSETS  = [0.0, 13.5, 42.0, -39.0]  # sdh bagus
 # BALL_YAW_OFFSETS  = [-50.0, -16.0, -39.0, -62.0] 
 # BALL_YAW_OFFSETS  = [-44.0, -45.0, -53.0, -57.0] 
 
@@ -170,14 +175,10 @@ class RobotActionState(Node):
             #    self.button_yaw= False
 
             if self.button_user == True:
-                self.state == 'UP'
-                self.get_logger().info(f'State Machine:{self.state} ')
                 self._start_pose('naik')
                 self.button_user = False
                 self.led.set_status_led(led3=True)
             elif self.button_user == False:
-                self.state == 'SCAN'
-                self.get_logger().info(f'State Machine: {self.state}')
                 self._start_pose('turun')
                 self.button_user = True
                 self.led.set_status_led(led3=False)
@@ -550,6 +551,10 @@ class RobotActionState(Node):
                 self.head_tilt = msg.position[i]
 
     def imu_callback(self,msg:Imu):
+        # Robot yang sedang duduk/IDLE tidak boleh memainkan page bangun
+        # hanya karena diangkat atau dimiringkan.
+        if self.state != 'SCAN':
+            return
         acc_x = msg.linear_acceleration.x
         self.action.fall(acc_x=acc_x,
                          treshold=THRESHOLD,

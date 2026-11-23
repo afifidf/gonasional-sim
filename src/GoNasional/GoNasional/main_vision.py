@@ -14,6 +14,8 @@ from .main_trigono import DistanceEstimator
 # from .Trigonometri import hitung, get_offset_angle,dfov_to_hv_fov
 import math
 
+from aroc_interfaces.msg import Detection, DetectionArray
+
 
 kf = KalmanFilter2D()
 # window_size=1 -> median dilewati, murni EMA
@@ -41,8 +43,27 @@ class VisionYolo(Node):
     
         #MODEL HARUS DI CONVERT DI PC YANG AKAN DI GUNAKAN!!!!! WAJIB !!!!
 
-        self.model = YOLO(  
-            "/home/aroc/BismilahNasional/src/GoNasional/model/nbaru_openvino_model",
+        # Path model dan jendela preview lewat parameter, supaya node yang
+        # sama jalan di PC robot, laptop, dan tanpa monitor:
+        #   ros2 run GoNasional vision --ros-args -p model_path:=/path/model -p show_window:=false -p imgsz:=640
+        self.declare_parameter(
+            'model_path',
+            "/home/aroc/BismilahNasional/src/GoNasional/model/nbaru_openvino_model")
+        self.declare_parameter('show_window', True)
+        self.show_window = self.get_parameter('show_window').value
+        # Model OpenVINO berukuran input tetap; imgsz harus sama dengan ukuran
+        # saat export (lihat metadata.yaml model), kalau tidak tiap frame gagal.
+        self.declare_parameter('imgsz', 480)
+        self.imgsz = self.get_parameter('imgsz').value
+        # Batas frame per detik (0 = setiap frame). Di simulasi YOLO berebut CPU
+        # dengan Webots; frame dibuang sebelum inferensi supaya hemat.
+        self.declare_parameter('max_fps', 0.0)
+        self.min_period = 1.0 / max(self.get_parameter('max_fps').value, 1e-6) \
+            if self.get_parameter('max_fps').value > 0 else 0.0
+        self.last_infer = 0.0
+
+        self.model = YOLO(
+            self.get_parameter('model_path').value,
             task="detect"
         )
 
@@ -76,6 +97,8 @@ class VisionYolo(Node):
             '/Hasil/Filter',
             10
         )
+        # Semua deteksi (bola dan landmark) untuk perception_bridge -> lokalisasi.
+        self.det_pub = self.create_publisher(DetectionArray, '/vision/detections', 10)
         # self.hfov, self.vfov = dfov_to_hv_fov(DFOV_DEG, ASPECT_W, ASPECT_H)
         # self.get_logger().info(f"[INFO] dFOV={DFOV_DEG}°  ->  HFOV={self.hfov:2f}°  VFOV={self.vfov:.2f}°")
 
@@ -92,8 +115,9 @@ class VisionYolo(Node):
                     self.derajat_kamera = msg.position[i]
 
     def image_callback(self, msg):
-        # if time.time() - self.prev_time< 1.0 / TARGET_FPS:
-        #     return
+        if self.min_period and time.monotonic() - self.last_infer < self.min_period:
+            return
+        self.last_infer = time.monotonic()
         try:
             # =========================
             # IMAGE CONVERT
@@ -110,14 +134,15 @@ class VisionYolo(Node):
             # =========================
             results = self.model(
                 frame,
-                imgsz=480,
+                imgsz=self.imgsz,
                 conf=SET_CONF,
                 device="cpu",
                 verbose=False
             )
 
             r = results[0]
-            annotated_frame = r.plot()
+            annotated_frame = r.plot() if self.show_window else None
+            self.publish_detections(r, msg.header)
 
             
             # landmark
@@ -246,11 +271,24 @@ class VisionYolo(Node):
             # =========================
             # DISPLAY
             # =========================
-            cv2.imshow("YOLO OpenVINO ROS2", annotated_frame)
-            cv2.waitKey(1)
+            if self.show_window:
+                cv2.imshow("YOLO OpenVINO ROS2", annotated_frame)
+                cv2.waitKey(1)
 
         except Exception as e:
             self.get_logger().error(f"Error: {e}")
+
+    def publish_detections(self, r, header):
+        out = DetectionArray()
+        out.header = header
+        out.width, out.height = IMG_WIDTH, IMG_HEIGHT
+        if r.boxes is not None:
+            for box in r.boxes:
+                x1, y1, x2, y2 = (float(v) for v in box.xyxy[0].tolist())
+                out.detections.append(Detection(
+                    label=r.names[int(box.cls[0])], confidence=float(box.conf[0]),
+                    x1=x1, y1=y1, x2=x2, y2=y2))
+        self.det_pub.publish(out)
 
     def vision_jarak(self, x1, y1, x2, y2):
         # hitung diameter pixel (pakai lebar bbox)

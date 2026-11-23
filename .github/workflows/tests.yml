@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    # Decision logic, localization, IPM, team play: pure Python + numpy.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy pytest
+      - name: pytest (no ROS)
+        working-directory: src/GoNasional
+        run: >
+          python -m pytest -q test/test_core.py test/test_closed_loop.py test/test_ipm.py
+          test/test_landmarks.py test/test_team.py test/test_gamecontroller.py
+
+  ros:
+    # Every node constructs with the shipped YAML (catches parameter bugs).
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ws/src/gonasional
+      - name: ROBOTIS message packages
+        run: |
+          apt-get update
+          apt-get install -y python3-pytest python3-numpy ros-jazzy-tf2-ros ros-jazzy-cv-bridge
+          cd ws/src
+          for r in ROBOTIS-Framework-msgs ROBOTIS-OP3-msgs; do
+            git clone --depth 1 -b jazzy-devel https://github.com/ROBOTIS-GIT/$r.git
+          done
+      - name: build
+        working-directory: ws
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --packages-up-to GoNasional aroc_interfaces
+      - name: node smoke test
+        working-directory: ws
+        run: |
+          source install/setup.bash
+          cd src/gonasional/src/GoNasional
+          python3 -m pytest -q test/test_nodes.py

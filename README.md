@@ -6,6 +6,58 @@ dilengkapi vision YOLO, kontrol kepala berbasis PID, dan GUI tuning PID.
 
 Dikembangkan untuk ROS 2 Jazzy / Python 3.12.
 
+Ada dua stack di package ini:
+
+- **`aroc_soccer` (baru)**: lokalisasi, striker behavior tree, dan team play 3 robot.
+  Diuji di simulasi Webots [op3-krsbi-sim](https://github.com/afifidf/op3-krsbi-sim).
+- **`state` (lama)**: state machine follow-head tim. Dijelaskan di bagian bawah.
+
+## Stack `aroc_soccer`
+
+```
+kamera ─ vision (YOLO) ──/vision/detections──┐
+                                             ├─ perception_bridge ─ /perception/ball, /perception/landmarks
+op3_manager ─ joint_states ─ robot_state_publisher (URDF, TF) ┘            │
+IMU/yaw ───────────────────────────────── localization (MCL + Kalman bola) ─ /world_model
+team_comm (UDP antar robot) ─ /team/state ─┐                               │
+GameController ─ game_controller ─ /game_state ─ behavior (role + striker BT) ─ /cmd_vel, /motion/kick, /head/mode
+                                                  motion_manager ─ /robotis/* (walking, action, kepala, bangun)
+```
+
+| Bagian | File | Isi |
+|---|---|---|
+| Persepsi | `core/ipm.py`, `core/landmarks.py`, `nodes/perception_bridge.py` | Piksel ke lantai lewat TF URDF (IPM). Landmark: tiang gawang (kaki tiang), titik penalti, titik tengah, sudut lapangan. Bola dipilih dengan cek geometri (ukuran kotak vs jarak, bukan di dalam kaki sendiri). Frame saat kepala/badan berputar cepat dibuang. |
+| Lokalisasi | `core/mcl.py`, `core/ball_filter.py`, `nodes/localization_node.py` | Particle filter (300 partikel), heading dari IMU. Asosiasi satu-ke-satu per jenis landmark, gating chi-square saat TRACKING, state LOST dengan injeksi partikel acak. Bola: Kalman [x, y, vx, vy] di frame lapangan. |
+| Behavior | `core/striker.py`, `core/team.py`, `nodes/behavior_node.py` | Cari bola, dekati dari belakang, orbit menghadap gawang, tendang. Team play: role kiper/striker/defender/supporter dibagi otomatis dan sama di semua robot; bola tim dipakai kalau robot tidak melihat bola. |
+| Tim | `nodes/team_comm.py`, `core/team_packet.py` | Paket JSON lewat UDP broadcast (port 10000 + nomor tim), 3 Hz. Mendeteksi dua robot dengan `player_number` sama. |
+| Gerak | `nodes/motion_manager.py`, `core/head_controller.py`, `core/fall_detector.py` | Satu-satunya node yang memerintah framework ROBOTIS: walking, tendang, bangun saat jatuh, scan kepala "berhenti lalu lihat". |
+| Wasit | `core/gamecontroller.py`, `nodes/game_controller_node.py` | Protokol GameController RoboCup HSL; tanpa GameController, tombol `start` untuk main. |
+
+Menjalankan di robot (setelah `op3_manager` dan kamera):
+
+```bash
+ros2 run GoNasional vision --ros-args -p model_path:=<folder_openvino> -p imgsz:=480 -p show_window:=false
+ros2 launch GoNasional aroc_soccer.launch.py
+ros2 run GoNasional preflight          # cek pra-pertandingan
+```
+
+Di simulasi: lihat README [op3-krsbi-sim](https://github.com/afifidf/op3-krsbi-sim).
+`player_number` harus berbeda di tiap robot (`config/soccer.yaml`). Checklist lengkap:
+[docs/checklist_pertandingan.md](src/GoNasional/docs/checklist_pertandingan.md).
+
+Tes (tanpa ROS untuk logika inti, dengan ROS untuk konstruksi node):
+
+```bash
+cd src/GoNasional
+python3 -m pytest -q test/test_core.py test/test_closed_loop.py test/test_ipm.py \
+    test/test_landmarks.py test/test_team.py test/test_gamecontroller.py
+python3 -m pytest -q test/test_nodes.py   # butuh workspace ROS yang sudah di-source
+```
+
+GitHub Actions menjalankan keduanya di tiap push.
+
+## Stack lama (`state`)
+
 ## Komponen Utama
 
 | File | Node / Class | Fungsi |
@@ -157,10 +209,9 @@ Deteksi jatuh memakai akselerasi IMU sumbu X (threshold 9) dan action page
 
 ## Catatan
 
-- Path model YOLO di `main_vision.py` masih hardcoded ke
-  `/home/aroc/BismilahNasional/src/GoNasional/model/nbaru_openvino_model`.
-  Sesuaikan dengan model yang tersedia, mis.
-  `src/GoNasional/model/boladekat_openvino_model`.
+- Path model YOLO di `main_vision.py` adalah parameter `model_path` (default
+  `/home/aroc/BismilahNasional/src/GoNasional/model/nbaru_openvino_model`), dan
+  `imgsz` harus sama dengan `metadata.yaml` model OpenVINO.
 - `HeadControl` bukan node mandiri. Entry point `headcontrol` belum bisa
   dijalankan karena `main()` di `main_head_control.py` masih dikomentari;
   gunakan `ros2 run GoNasional state`.

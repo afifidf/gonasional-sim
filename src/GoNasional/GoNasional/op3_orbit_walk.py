@@ -38,6 +38,7 @@ class OP3OrbitWalker:
         )
 
         self._timer = None
+        self._stop_timer = None
         self._orbit_param = None
 
     @property
@@ -137,6 +138,12 @@ class OP3OrbitWalker:
             self._timer.cancel()
             self._timer = None
 
+        # Timer durasi orbit yang lama harus ikut mati, kalau tidak ia
+        # menghentikan jalan berikutnya di tengah langkah.
+        if self._stop_timer is not None:
+            self._stop_timer.cancel()
+            self._stop_timer = None
+
     def _stop_orbit(self):
 
         self.node.get_logger().info("STOP ORBIT")
@@ -192,7 +199,7 @@ class OP3OrbitWalker:
         )
 
         # Timer stop (opsional)
-        if hasattr(self, "_stop_timer") and self._stop_timer is not None:
+        if self._stop_timer is not None:
             self._stop_timer.cancel()
 
         if duration > 0:
